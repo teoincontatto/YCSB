@@ -42,6 +42,7 @@ import com.allanbank.mongodb.bson.ElementType;
 import com.allanbank.mongodb.bson.builder.BuilderFactory;
 import com.allanbank.mongodb.bson.builder.DocumentBuilder;
 import com.allanbank.mongodb.bson.element.BinaryElement;
+import com.allanbank.mongodb.bson.element.StringElement;
 import com.allanbank.mongodb.builder.BatchedWrite;
 import com.allanbank.mongodb.builder.BatchedWriteMode;
 import com.allanbank.mongodb.builder.Find;
@@ -49,6 +50,7 @@ import com.allanbank.mongodb.builder.Sort;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
+import com.yahoo.ycsb.StringByteIterator;
 
 /**
  * MongoDB asynchronous client for YCSB framework using the <a
@@ -250,7 +252,7 @@ public class AsyncMongoDbClient extends DB {
           DOCUMENT_BUILDER.get().reset().add("_id", key);
       final Document query = toInsert.build();
       for (final Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        toInsert.add(entry.getKey(), entry.getValue().toArray());
+        toInsert.add(entry.getKey(), entry.getValue().toString());
       }
 
       // Do an upsert.
@@ -439,7 +441,7 @@ public class AsyncMongoDbClient extends DB {
       final DocumentBuilder fieldsToSet = update.push("$set");
 
       for (final Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        fieldsToSet.add(entry.getKey(), entry.getValue().toArray());
+        fieldsToSet.add(entry.getKey(), entry.getValue().toString());
       }
       final long res =
           collection.update(query, update, false, false, writeConcern);
@@ -464,6 +466,10 @@ public class AsyncMongoDbClient extends DB {
       if (be.getType() == ElementType.BINARY) {
         result.put(be.getName(),
             new BinaryByteArrayIterator((BinaryElement) be));
+      }
+      if (be.getType() == ElementType.STRING) {
+        result.put(be.getName(),
+            new StringByteIterator(((StringElement) be).getValue()));
       }
     }
   }

@@ -34,6 +34,7 @@ import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.mongodb.client.model.InsertManyOptions;
+
 import org.bson.Document;
 import org.bson.types.Binary;
 
@@ -52,6 +53,7 @@ import com.yahoo.ycsb.ByteArrayByteIterator;
 import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
+import com.yahoo.ycsb.StringByteIterator;
 
 /**
  * MongoDB asynchronous client for YCSB framework using the MongoDB Inc. <a
@@ -247,15 +249,17 @@ public class MongoDbClient extends DB {
       MongoCollection<Document> collection = database.getCollection(table);
       Document toInsert = new Document("_id", key);
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        toInsert.put(entry.getKey(), entry.getValue().toArray());
+        toInsert.put(entry.getKey(), entry.getValue().toString());
       }
 
       if (batchSize == 1) {
         // this is effectively an insert, but using an upsert instead due
         // to current inability of the framework to clean up after itself
         // between test runs.
-        collection.replaceOne(new Document("_id", toInsert.get("_id")),
-            toInsert, UPDATE_WITH_UPSERT);
+        //  collection.replaceOne(new Document("_id", toInsert.get("_id")),
+        //          toInsert, UPDATE_WITH_UPSERT);
+        collection.deleteOne(new Document("_id", toInsert.get("_id")));
+        collection.insertOne(toInsert);
       } else {
         bulkInserts.add(toInsert);
         if (bulkInserts.size() == batchSize) {
@@ -304,7 +308,8 @@ public class MongoDbClient extends DB {
         findIterable.projection(projection);
       }
 
-      Document queryResult = findIterable.first();
+      MongoCursor<Document> cursor = findIterable.iterator();
+      Document queryResult = cursor.next();
 
       if (queryResult != null) {
         fillMap(result, queryResult);
@@ -409,7 +414,7 @@ public class MongoDbClient extends DB {
       Document query = new Document("_id", key);
       Document fieldsToSet = new Document();
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        fieldsToSet.put(entry.getKey(), entry.getValue().toArray());
+        fieldsToSet.put(entry.getKey(), entry.getValue().toString());
       }
       Document update = new Document("$set", fieldsToSet);
 
@@ -438,6 +443,10 @@ public class MongoDbClient extends DB {
       if (entry.getValue() instanceof Binary) {
         resultMap.put(entry.getKey(),
             new ByteArrayByteIterator(((Binary) entry.getValue()).getData()));
+      }
+      if (entry.getValue() instanceof String) {
+        resultMap.put(entry.getKey(),
+            new StringByteIterator((String) entry.getValue()));
       }
     }
   }
