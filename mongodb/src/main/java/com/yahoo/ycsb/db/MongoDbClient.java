@@ -26,6 +26,7 @@ package com.yahoo.ycsb.db;
 
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.bson.BsonArray;
+import org.bson.BsonValue;
 import org.bson.Document;
 import org.bson.types.Binary;
 
@@ -107,8 +110,14 @@ public class MongoDbClient extends DB {
   /** The batch size to use for inserts. */
   private static int batchSize;
 
+  /** If true then close cursor after using them. */
+  private static boolean closeCursor;
+
   /** If true then use updates with the upsert option for inserts. */
   private static boolean useUpsert;
+
+  /** If true then use new api for insert/update/delete. */
+  private static boolean useNewApi;
 
   /** The bulk inserts pending for the thread. */
   private final List<Document> bulkInserts = new ArrayList<Document>();
@@ -180,9 +189,17 @@ public class MongoDbClient extends DB {
       // Set insert batchsize, default 1 - to be YCSB-original equivalent
       batchSize = Integer.parseInt(props.getProperty("batchsize", "1"));
 
+      // Set is cursors are closed after use. Defaults to false.
+      closeCursor = Boolean.parseBoolean(
+          props.getProperty("mongodb.closecursor", "false"));
+
       // Set is inserts are done as upserts. Defaults to false.
       useUpsert = Boolean.parseBoolean(
           props.getProperty("mongodb.upsert", "false"));
+
+      // Set is use new api for insert/update/delete. Defaults to false.
+      useNewApi = Boolean.parseBoolean(
+          props.getProperty("mongodb.newapi", "false"));
 
       // Just use the standard connection format URL
       // http://docs.mongodb.org/manual/reference/connection-string/
@@ -323,6 +340,10 @@ public class MongoDbClient extends DB {
       Document query = new Document("_id", key);
 
       FindIterable<Document> findIterable = collection.find(query);
+      
+      if (closeCursor) {
+        findIterable = findIterable.limit(1);
+      }
 
       if (fields != null) {
         Document projection = new Document();
@@ -402,6 +423,10 @@ public class MongoDbClient extends DB {
 
         result.add(resultMap);
       }
+      
+      if (closeCursor) {
+        cursor.close();
+      }
 
       return Status.OK;
     } catch (Exception e) {
@@ -441,7 +466,43 @@ public class MongoDbClient extends DB {
       }
       Document update = new Document("$set", fieldsToSet);
 
-      UpdateResult result = collection.updateOne(query, update);
+      UpdateResult result = null;
+      if (useNewApi) {
+        Document commandResult = database.runCommand(new Document()
+            .append("update", table)
+            .append("updates", Arrays.asList(new Document[] {
+              new Document()
+              .append("q", query)
+              .append("u", update)
+              .append("multi", false)
+              .append("upsert", false)
+            }))
+            .append("ordered", false));
+        
+        System.out.println(commandResult);
+        
+        try {
+          if (commandResult.getDouble("ok").equals(Double.valueOf(1.0))) {
+            result = UpdateResult.acknowledged(
+              commandResult.getInteger("n").longValue(),
+              commandResult.getInteger("nModified").longValue(),
+              new BsonArray((List<? extends BsonValue>) commandResult.get("upserted")));
+          }
+        } catch(Throwable throwable) {
+          System.err.println(throwable.getMessage());
+          result = null;
+        }
+      
+        if (result == null) {
+          result = UpdateResult.acknowledged(
+                  0L,
+                  0L,
+                  (BsonValue) null);
+        }
+      } else {
+        result = collection.updateOne(query, update);
+      }
+      System.out.println(result);
       if (result.wasAcknowledged() && result.getMatchedCount() == 0) {
         System.err.println("Nothing updated for key " + key);
         return Status.NOT_FOUND;

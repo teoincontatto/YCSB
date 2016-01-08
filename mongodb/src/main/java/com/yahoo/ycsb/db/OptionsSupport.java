@@ -136,7 +136,9 @@ public final class OptionsSupport {
    */
   private static String addUrlOption(String url, String name, String value) {
     String fullName = name + "=";
-    if (!url.contains(fullName)) {
+    String fullNameFirst = "?" + fullName;
+    String fullNameNext = "&" + fullName;
+    if (!url.contains(fullNameFirst) && !url.contains(fullNameNext)) {
       if (url.contains("?")) {
         return url + "&" + fullName + value;
       }
