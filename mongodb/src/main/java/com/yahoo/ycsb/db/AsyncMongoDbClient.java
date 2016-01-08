@@ -18,6 +18,14 @@ package com.yahoo.ycsb.db;
 
 import static com.allanbank.mongodb.builder.QueryBuilder.where;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.allanbank.mongodb.Durability;
 import com.allanbank.mongodb.LockType;
 import com.allanbank.mongodb.MongoClient;
@@ -34,6 +42,7 @@ import com.allanbank.mongodb.bson.ElementType;
 import com.allanbank.mongodb.bson.builder.BuilderFactory;
 import com.allanbank.mongodb.bson.builder.DocumentBuilder;
 import com.allanbank.mongodb.bson.element.BinaryElement;
+import com.allanbank.mongodb.bson.element.StringElement;
 import com.allanbank.mongodb.builder.BatchedWrite;
 import com.allanbank.mongodb.builder.BatchedWriteMode;
 import com.allanbank.mongodb.builder.Find;
@@ -42,14 +51,7 @@ import com.yahoo.ycsb.ByteIterator;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
-
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.Vector;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.yahoo.ycsb.StringByteIterator;
 
 /**
  * MongoDB asynchronous client for YCSB framework using the <a
@@ -458,7 +460,7 @@ public class AsyncMongoDbClient extends DB {
       final DocumentBuilder fieldsToSet = update.push("$set");
 
       for (final Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        fieldsToSet.add(entry.getKey(), entry.getValue().toArray());
+        fieldsToSet.add(entry.getKey(), entry.getValue().toString());
       }
       final long res =
           collection.update(query, update, false, false, writeConcern);
@@ -483,6 +485,10 @@ public class AsyncMongoDbClient extends DB {
       if (be.getType() == ElementType.BINARY) {
         result.put(be.getName(),
             new BinaryByteArrayIterator((BinaryElement) be));
+      }
+      if (be.getType() == ElementType.STRING) {
+        result.put(be.getName(),
+            new StringByteIterator(((StringElement) be).getValue()));
       }
     }
   }
