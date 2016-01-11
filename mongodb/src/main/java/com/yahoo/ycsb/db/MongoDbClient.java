@@ -276,9 +276,9 @@ public class MongoDbClient extends DB {
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
         Object value = null;
         if (useStrings) {
-            value = entry.getValue().toString();
+          value = entry.getValue().toString();
         } else {
-            value = entry.getValue().toArray();
+          value = entry.getValue().toArray();
         }
         toInsert.put(entry.getKey(), value);
       }
@@ -461,9 +461,9 @@ public class MongoDbClient extends DB {
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
         Object value = null;
         if (useStrings) {
-            value = entry.getValue().toString();
+          value = entry.getValue().toString();
         } else {
-            value = entry.getValue().toArray();
+          value = entry.getValue().toArray();
         }
         fieldsToSet.put(entry.getKey(), value);
       }
