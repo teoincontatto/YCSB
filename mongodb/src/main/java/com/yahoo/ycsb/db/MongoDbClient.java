@@ -24,22 +24,6 @@
  */
 package com.yahoo.ycsb.db;
 
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.Vector;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.bson.BsonArray;
-import org.bson.BsonValue;
-import org.bson.Document;
-import org.bson.types.Binary;
-
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
 import com.mongodb.ReadPreference;
@@ -59,6 +43,21 @@ import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.StringByteIterator;
+
+import org.bson.BsonArray;
+import org.bson.BsonValue;
+import org.bson.Document;
+import org.bson.types.Binary;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MongoDB binding for YCSB framework using the MongoDB Inc. <a
@@ -110,8 +109,8 @@ public class MongoDbClient extends DB {
   /** The batch size to use for inserts. */
   private static int batchSize;
 
-  /** If true then close cursor after using them. */
-  private static boolean closeCursor;
+  /** If true then use strings instear of byte arrays. */
+  private static boolean useStrings;
 
   /** If true then use updates with the upsert option for inserts. */
   private static boolean useUpsert;
@@ -189,9 +188,9 @@ public class MongoDbClient extends DB {
       // Set insert batchsize, default 1 - to be YCSB-original equivalent
       batchSize = Integer.parseInt(props.getProperty("batchsize", "1"));
 
-      // Set is cursors are closed after use. Defaults to false.
-      closeCursor = Boolean.parseBoolean(
-          props.getProperty("mongodb.closecursor", "false"));
+      // Set is inserts are done as upserts. Defaults to false.
+      useStrings = Boolean.parseBoolean(
+          props.getProperty("mongodb.strings", "false"));
 
       // Set is inserts are done as upserts. Defaults to false.
       useUpsert = Boolean.parseBoolean(
@@ -275,7 +274,13 @@ public class MongoDbClient extends DB {
       MongoCollection<Document> collection = database.getCollection(table);
       Document toInsert = new Document("_id", key);
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        toInsert.put(entry.getKey(), entry.getValue().toString());
+        Object value = null;
+        if (useStrings) {
+            value = entry.getValue().toString();
+        } else {
+            value = entry.getValue().toArray();
+        }
+        toInsert.put(entry.getKey(), value);
       }
 
       if (batchSize == 1) {
@@ -340,10 +345,6 @@ public class MongoDbClient extends DB {
       Document query = new Document("_id", key);
 
       FindIterable<Document> findIterable = collection.find(query);
-      
-      if (closeCursor) {
-        findIterable = findIterable.limit(1);
-      }
 
       if (fields != null) {
         Document projection = new Document();
@@ -423,10 +424,6 @@ public class MongoDbClient extends DB {
 
         result.add(resultMap);
       }
-      
-      if (closeCursor) {
-        cursor.close();
-      }
 
       return Status.OK;
     } catch (Exception e) {
@@ -462,7 +459,13 @@ public class MongoDbClient extends DB {
       Document query = new Document("_id", key);
       Document fieldsToSet = new Document();
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        fieldsToSet.put(entry.getKey(), entry.getValue().toString());
+        Object value = null;
+        if (useStrings) {
+            value = entry.getValue().toString();
+        } else {
+            value = entry.getValue().toArray();
+        }
+        fieldsToSet.put(entry.getKey(), value);
       }
       Document update = new Document("$set", fieldsToSet);
 
@@ -479,14 +482,14 @@ public class MongoDbClient extends DB {
             }))
             .append("ordered", false));
         
-        System.out.println(commandResult);
-        
         try {
-          if (commandResult.getDouble("ok").equals(Double.valueOf(1.0))) {
+          if (((Number) commandResult.get("ok")).intValue() == 1) {
             result = UpdateResult.acknowledged(
               commandResult.getInteger("n").longValue(),
               commandResult.getInteger("nModified").longValue(),
-              new BsonArray((List<? extends BsonValue>) commandResult.get("upserted")));
+              commandResult.get("upserted")!=null?
+                new BsonArray((List<? extends BsonValue>) commandResult.get("upserted")):
+                null);
           }
         } catch(Throwable throwable) {
           System.err.println(throwable.getMessage());
@@ -502,7 +505,6 @@ public class MongoDbClient extends DB {
       } else {
         result = collection.updateOne(query, update);
       }
-      System.out.println(result);
       if (result.wasAcknowledged() && result.getMatchedCount() == 0) {
         System.err.println("Nothing updated for key " + key);
         return Status.NOT_FOUND;
